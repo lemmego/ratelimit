@@ -3,8 +3,8 @@ module github.com/lemmego/ratelimit
 go 1.27
 
 require (
-	github.com/lemmego/api v0.1.44
-	github.com/lemmego/apptest v0.0.0
+	github.com/lemmego/api v0.1.45
+	github.com/lemmego/apptest v0.1.0
 	github.com/lemmego/auth v0.2.1
 	github.com/lemmego/cache v0.1.3
 )
@@ -50,6 +50,7 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/lemmego/fsys v0.1.0 // indirect
+	github.com/lemmego/inertia v0.1.11 // indirect
 	github.com/lemmego/migration v0.1.23 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -89,5 +90,3 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.46.1 // indirect
 )
-
-replace github.com/lemmego/apptest => ../apptest
