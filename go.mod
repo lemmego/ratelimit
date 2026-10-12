@@ -3,10 +3,10 @@ module github.com/lemmego/ratelimit
 go 1.27
 
 require (
-	github.com/lemmego/api v0.1.45
-	github.com/lemmego/apptest v0.1.0
-	github.com/lemmego/auth v0.2.1
-	github.com/lemmego/cache v0.1.3
+	github.com/lemmego/api v0.2.0
+	github.com/lemmego/apptest v0.2.0
+	github.com/lemmego/auth v0.3.0
+	github.com/lemmego/cache v0.2.0
 )
 
 require (
@@ -33,14 +33,11 @@ require (
 	github.com/envoyproxy/protoc-gen-validate v1.1.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gertd/go-pluralize v0.2.1 // indirect
-	github.com/ggicci/httpin v0.19.0 // indirect
-	github.com/ggicci/owl v0.8.2 // indirect
 	github.com/glebarez/go-sqlite v1.22.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
-	github.com/golang/gddo v0.0.0-20210115222349-20d68f94ee1f // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/s2a-go v0.1.8 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -50,7 +47,7 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/lemmego/fsys v0.1.0 // indirect
-	github.com/lemmego/inertia v0.1.11 // indirect
+	github.com/lemmego/inertia v0.2.0 // indirect
 	github.com/lemmego/migration v0.1.23 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
