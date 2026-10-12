@@ -94,35 +94,76 @@ type Opts struct {
 	Message string
 }
 
-// PerIP limits by client IP. Use it for anything an anonymous visitor can
-// reach: login, registration, password reset.
+// PerIP limits one client IP's use of one route. Use it for anything an
+// anonymous visitor can reach: login, registration, password reset.
 func PerIP(limit int, window time.Duration) *Opts {
-	return &Opts{Limit: limit, Window: window, Key: ClientIP}
+	return &Opts{Limit: limit, Window: window, Key: func(c app.Context) string {
+		return "ip:" + ClientIP(c) + "|" + Route(c)
+	}}
 }
 
-// PerUser limits by authenticated user, falling back to IP for an anonymous
-// request.
+// PerUser limits one authenticated user's use of one route, falling back to
+// the IP for an anonymous request.
 //
 // Keying on the user is what you want for an action only a signed-in person
 // can take — voting, commenting, posting — because an IP is shared by an
 // office, a university and a mobile carrier's NAT, and limiting those as one
 // caller punishes the wrong people.
+//
+// The route is part of the key, and it did not used to be. Without it every
+// PerUser limit sharing a window length shares one counter, so limits with
+// different thresholds fight over the same number: in the application this
+// was found in, nine routes counted into one hourly bucket — a 120-an-hour
+// feed limit and a 3-an-hour "resend my verification email" among them — and
+// reading the feed six times locked the account out of confirming its own
+// address. The counter said 6 and the refusal quoted 3, which is a report
+// about a limit nobody set.
+//
+// A caller who genuinely wants one budget spanning several routes sets
+// Opts.Key to something that does not vary by route, and should say in a
+// comment why.
 func PerUser(limit int, window time.Duration) *Opts {
 	return &Opts{Limit: limit, Window: window, Key: func(c app.Context) string {
-		if id, ok := auth.UserID(c); ok && id != "" {
-			return "user:" + id
-		}
-		return "ip:" + ClientIP(c)
+		return Caller(c) + "|" + Route(c)
 	}}
 }
 
-// PerRoute limits by route and caller together, so a user near their limit on
-// one action is not refused a different one.
+// PerRoute is PerUser.
+//
+// It predates the route being part of PerUser's key, which is what it existed
+// to add. Kept because the name reads well at a call site and removing it
+// would break code for no gain.
 func PerRoute(limit int, window time.Duration) *Opts {
-	base := PerUser(limit, window)
-	return &Opts{Limit: limit, Window: window, Key: func(c app.Context) string {
-		return c.Request().Method + " " + c.Request().URL.Path + "|" + base.Key(c)
-	}}
+	return PerUser(limit, window)
+}
+
+// Caller identifies who is asking: the authenticated user, or the client IP
+// when nobody is signed in.
+func Caller(c app.Context) string {
+	if id, ok := auth.UserID(c); ok && id != "" {
+		return "user:" + id
+	}
+	return "ip:" + ClientIP(c)
+}
+
+// Route identifies what is being asked for.
+//
+// It is the *matched pattern* rather than the request path, which matters for
+// any route carrying a parameter: keying on the path would give
+// /launch/a/upvote and /launch/b/upvote separate counters, turning "20 upvotes
+// an hour" into "20 an hour per launch" — a limit that counts nothing an
+// abuser cannot step around by picking a different target.
+//
+// http.ServeMux records the pattern on the request, so this costs nothing and
+// needs no router dependency. The path is the fallback for a handler reached
+// without going through the mux, such as one mounted directly or called from
+// a test.
+func Route(c app.Context) string {
+	request := c.Request()
+	if pattern := request.Pattern; pattern != "" {
+		return pattern
+	}
+	return request.Method + " " + request.URL.Path
 }
 
 // ClientIP returns the caller's address.

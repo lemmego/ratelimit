@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"testing"
 	"time"
@@ -192,5 +193,106 @@ func TestTrimAndIndexHelpers(t *testing.T) {
 	}
 	if got := indexByte("ab", ','); got != -1 {
 		t.Errorf("indexByte with no match = %d", got)
+	}
+}
+
+// TestTwoRoutesWithOneWindowDoNotShareACounter is the bug this guards.
+//
+// PerUser used to key on the caller alone, and the window slot is part of the
+// stored key — so every PerUser limit with the same window length counted
+// into one number while each route compared it against its own threshold. In
+// the application this was found in, nine routes shared an hourly bucket: a
+// 120-an-hour feed limit and a 3-an-hour "resend my verification email"
+// among them. Reading the feed six times locked the account out of confirming
+// its own address, and the refusal quoted a limit of 3 against a counter it
+// had not moved.
+func TestTwoRoutesWithOneWindowDoNotShareACounter(t *testing.T) {
+	a := apptest.New(t,
+		apptest.WithConfig(cacheConfig()),
+		apptest.WithProviders(cacheProvider()),
+		apptest.WithRoutes(func(a app.App) {
+			// Same caller, same window length, different thresholds — which
+			// is exactly the shape that broke.
+			a.Router().Get("/busy",
+				Middleware(PerUser(5, time.Hour)),
+				func(c app.Context) error { return c.JSON(app.M{"ok": true}) })
+			a.Router().Get("/scarce",
+				Middleware(PerUser(1, time.Hour)),
+				func(c app.Context) error { return c.JSON(app.M{"ok": true}) })
+		}),
+	)
+
+	// Spend the generous route's budget.
+	for i := 0; i < 5; i++ {
+		a.Get("/busy").Send().AssertStatus(http.StatusOK)
+	}
+	a.Get("/busy").Send().AssertStatus(http.StatusTooManyRequests)
+
+	// The scarce route still has its one.
+	a.Get("/scarce").Send().AssertStatus(http.StatusOK)
+	a.Get("/scarce").Send().AssertStatus(http.StatusTooManyRequests)
+}
+
+// The same, for an anonymous caller: /login at 5 a minute must not be spent
+// by /search at 30 a minute.
+func TestPerIPDoesNotShareACounterBetweenRoutes(t *testing.T) {
+	a := apptest.New(t,
+		apptest.WithConfig(cacheConfig()),
+		apptest.WithProviders(cacheProvider()),
+		apptest.WithRoutes(func(a app.App) {
+			a.Router().Get("/search",
+				Middleware(PerIP(30, time.Minute)),
+				func(c app.Context) error { return c.JSON(app.M{"ok": true}) })
+			a.Router().Get("/signin",
+				Middleware(PerIP(2, time.Minute)),
+				func(c app.Context) error { return c.JSON(app.M{"ok": true}) })
+		}),
+	)
+
+	for i := 0; i < 6; i++ {
+		a.Get("/search").Send().AssertStatus(http.StatusOK)
+	}
+	// Six searches used to leave /signin with nothing.
+	a.Get("/signin").Send().AssertStatus(http.StatusOK)
+	a.Get("/signin").Send().AssertStatus(http.StatusOK)
+	a.Get("/signin").Send().AssertStatus(http.StatusTooManyRequests)
+}
+
+// A limit on a parameterised route counts the action, not the target.
+//
+// Keying on the request path would give /things/a/vote and /things/b/vote
+// separate counters, which is a limit an abuser steps around by picking a
+// different target — the one thing a vote limit exists to stop.
+func TestAParameterisedRouteIsOneCounter(t *testing.T) {
+	a := apptest.New(t,
+		apptest.WithConfig(cacheConfig()),
+		apptest.WithProviders(cacheProvider()),
+		apptest.WithRoutes(func(a app.App) {
+			a.Router().Get("/things/{id}/vote",
+				Middleware(PerUser(2, time.Hour)),
+				func(c app.Context) error { return c.JSON(app.M{"ok": true}) })
+		}),
+	)
+
+	a.Get("/things/one/vote").Send().AssertStatus(http.StatusOK)
+	a.Get("/things/two/vote").Send().AssertStatus(http.StatusOK)
+	a.Get("/things/three/vote").Send().AssertStatus(http.StatusTooManyRequests)
+}
+
+// Route prefers the matched pattern, and falls back to the path for a handler
+// reached without the mux — a direct mount, or a test driving a handler.
+func TestRouteFallsBackToThePathWithoutAPattern(t *testing.T) {
+	request, err := http.NewRequest(http.MethodPost, "http://example.test/a/b", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := app.NewContext(nil, httptest.NewRecorder(), request)
+	if got := Route(c); got != "POST /a/b" {
+		t.Errorf("Route() = %q, want the method and path", got)
+	}
+
+	request.Pattern = "POST /a/{id}"
+	if got := Route(c); got != "POST /a/{id}" {
+		t.Errorf("Route() = %q, want the matched pattern", got)
 	}
 }

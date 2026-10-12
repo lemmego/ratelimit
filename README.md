@@ -46,22 +46,43 @@ across a window boundary. For login and signup that is irrelevant. For
 anything where it matters, the honest answer is a sliding window, which this
 package deliberately does not implement.
 
-## The four key strategies
+## The key strategies
 
 ```go
 ratelimit.PerIP(5, time.Minute)      // anonymous: login, register, password reset
 ratelimit.PerUser(30, time.Minute)   // signed-in actions: vote, comment, post
-ratelimit.PerRoute(10, time.Minute)  // route and caller together
 &ratelimit.Opts{Limit: 10, Window: time.Minute, Key: myKey, Message: "…"}
 ```
+
+Both key on **the caller and the route together**, so each limit counts its
+own action. `PerRoute` is kept as a synonym for `PerUser`; it predates the
+route being part of the key, which is what it existed to add.
 
 **Prefer `PerUser` for anything only a signed-in person can do.** An IP is
 shared by an office, a university and a mobile carrier's NAT; limiting those
 as one caller punishes the wrong people. `PerUser` falls back to the IP for an
 anonymous request, so it is safe on a mixed route.
 
-**`PerRoute` keys on method, path and caller together**, so somebody near
-their limit on one action is not refused a different one.
+The route is the **matched pattern**, not the request path. That matters for
+any route carrying a parameter: keying on the path would give
+`/launch/a/upvote` and `/launch/b/upvote` separate counters, turning "20
+upvotes an hour" into "20 an hour per launch" — a limit an abuser steps around
+by choosing a different target.
+
+### Why the route is in the key
+
+It was not, until v0.1.1, and the gap was expensive. The window slot is part
+of the stored key, so every limit sharing a *window length* shared one
+counter while each route compared it against its own threshold. In the
+application this was found in, nine routes counted into one hourly bucket — a
+120-an-hour feed limit and a 3-an-hour "resend my verification email" among
+them — so reading the feed six times locked the account out of confirming its
+own address, and the refusal quoted a limit of 3 against a counter it had not
+moved.
+
+A caller who genuinely wants one budget spanning several routes sets
+`Opts.Key` to something that does not vary by route, and should say in a
+comment why.
 
 ## `X-Forwarded-For` is ignored until you say otherwise
 
