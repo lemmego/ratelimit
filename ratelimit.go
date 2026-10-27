@@ -110,29 +110,21 @@ func PerIP(limit int, window time.Duration) *Opts {
 // office, a university and a mobile carrier's NAT, and limiting those as one
 // caller punishes the wrong people.
 //
-// The route is part of the key, and it did not used to be. Without it every
-// PerUser limit sharing a window length shares one counter, so limits with
-// different thresholds fight over the same number: in the application this
-// was found in, nine routes counted into one hourly bucket — a 120-an-hour
-// feed limit and a 3-an-hour "resend my verification email" among them — and
-// reading the feed six times locked the account out of confirming its own
-// address. The counter said 6 and the refusal quoted 3, which is a report
-// about a limit nobody set.
+// The matched route is part of the key, so each limit counts its own action.
+// Two routes limited at 20 an hour give a caller 20 each rather than 20
+// between them, and a limit's threshold cannot be spent by traffic to a
+// different route.
 //
-// A caller who genuinely wants one budget spanning several routes sets
-// Opts.Key to something that does not vary by route, and should say in a
-// comment why.
+// To share one budget across several routes, set Opts.Key to something that
+// does not vary by route.
 func PerUser(limit int, window time.Duration) *Opts {
 	return &Opts{Limit: limit, Window: window, Key: func(c app.Context) string {
 		return Caller(c) + "|" + Route(c)
 	}}
 }
 
-// PerRoute is PerUser.
-//
-// It predates the route being part of PerUser's key, which is what it existed
-// to add. Kept because the name reads well at a call site and removing it
-// would break code for no gain.
+// PerRoute is an alias for PerUser, kept because the name reads well at a
+// call site.
 func PerRoute(limit int, window time.Duration) *Opts {
 	return PerUser(limit, window)
 }
